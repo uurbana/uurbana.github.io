@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grist - Pointage Individuel & Gestion Temps</title>
+  <!-- SDK Grist officiel (fonctionne aussi hors-ligne avec sauvegarde locale) -->
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <style>
+    :root[data-theme="light"] {
+      --bg-main: #f4f7fb;
+      --bg-card: #ffffff;
+      --bg-header: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --accent: #0ea5e9;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --row-28: #fef3c7;
+      --row-weekend: #f8fafc;
+      --row-vacances: #eff6ff;
+    }
+    :root[data-theme="dark"] {
+      --bg-main: #0f172a;
+      --bg-card: #1e293b;
+      --bg-header: #020617;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #60a5fa;
+      --accent: #38bdf8;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --row-28: #451a03;
+      --row-weekend: #131c31;
+      --row-vacances: #172554;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg-main); color: var(--text-main); font-size: 13.5px; line-height: 1.45; padding-bottom: 40px; }
+
+    /* Topbar */
+    .topbar {
+      background: var(--bg-header); color: #fff; padding: 12px 20px;
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.3px; }
+    .live-clock {
+      background: rgba(255,255,255,0.12); padding: 6px 14px; border-radius: 8px;
+      font-family: 'Courier New', monospace; font-size: 16px; font-weight: 700; color: #38bdf8;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .nav-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tab-btn {
+      background: rgba(255,255,255,0.08); color: #cbd5e1; border: none;
+      padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: 0.2s;
+    }
+    .tab-btn:hover { background: rgba(255,255,255,0.18); color: #fff; }
+    .tab-btn.active { background: var(--primary); color: #fff; }
+    .theme-btn {
+      background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #fff;
+      padding: 7px 11px; border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+
+    .container { max-width: 1480px; margin: 16px auto; padding: 0 14px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Cards & KPIs */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+      gap: 12px; margin-bottom: 16px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .kpi-title { font-size: 11.5px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: 4px; }
+    .kpi-value { font-size: 20px; font-weight: 800; }
+    .kpi-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 4px; }
+
+    /* Quick Punch Bar */
+    .punch-bar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; background: var(--bg-card); padding: 12px 16px;
+      border-radius: 10px; border: 1px solid var(--border);
+    }
+    .punch-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn {
+      background: var(--primary); color: #fff; border: none; padding: 8px 13px;
+      border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12.5px; transition: 0.15s;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-outline {
+      background: transparent; color: var(--text-main); border: 1px solid var(--border);
+    }
+    .btn-outline:hover { background: var(--border); }
+    .btn-success { background: var(--success); }
+    .btn-warning { background: var(--warning); }
+    .btn-danger { background: var(--danger); }
+
+    /* Filters */
+    .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    select, input[type="text"], input[type="time"], input[type="number"], input[type="date"] {
+      background: var(--bg-main); color: var(--text-main); border: 1px solid var(--border);
+      padding: 5px 8px; border-radius: 5px; font-size: 12.5px;
+    }
+
+    /* Table Pointage */
+    .table-wrap { overflow-x: auto; background: var(--bg-card); border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; min-width: 1180px; }
+    th, td { padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: center; }
+    th {
+      background: var(--bg-main); color: var(--text-muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.4px; position: sticky; top: 0;
+    }
+    tr.weekend { background: var(--row-weekend); opacity: 0.78; }
+    tr.vacances { background: var(--row-vacances); }
+    tr.cycle28-end { background: var(--row-28) !important; font-weight: 600; border-bottom: 2px solid var(--warning); }
+    .badge {
+      display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 700;
+    }
+    .badge-rcb { background: #fef08a; color: #854d0e; border: 1px solid #facc15; }
+    .badge-prev { background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; }
+    .badge-vac { background: #dbeafe; color: #1e40af; font-size: 10px; }
+    .pos { color: var(--success); font-weight: 700; }
+    .neg { color: var(--danger); font-weight: 700; }
+
+    /* Config Grid */
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+    .form-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+    .form-row label { font-weight: 500; }
+
+    /* Timer */
+    .timer-box { max-width: 480px; margin: 30px auto; text-align: center; padding: 28px; }
+    .timer-display { font-size: 56px; font-weight: 800; font-family: 'Courier New', monospace; margin: 20px 0; color: var(--primary); }
+    .timer-inputs { display: flex; justify-content: center; gap: 12px; margin-bottom: 18px; }
+    .timer-inputs div { display: flex; flex-direction: column; align-items: center; font-size: 12px; }
+    .timer-inputs input { width: 70px; text-align: center; font-size: 16px; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <!-- BARRE SUPÉRIEURE -->
+  <header class="topbar">
+    <div class="brand">
+      <h1>⏱️ Pointage & Gestion Horaires (Grist)</h1>
+      <div class="live-clock" id="liveClock">00:00:00</div>
+    </div>
+    <nav class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('pointage', this)">📅 Pointages</button>
+      <button class="tab-btn" onclick="switchTab('previsions', this)">🏖️ Prévisions Congés</button>
+      <button class="tab-btn" onclick="switchTab('timer', this)">⏳ Timer</button>
+      <button class="tab-btn" onclick="switchTab('config', this)">⚙️ Configuration</button>
+    </nav>
+    <div>
+      <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌙 Thème Sombre</button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ==================== ONGLET 1 : POINTAGE ==================== -->
+    <section id="tab-pointage" class="tab-panel active">
+
+      <!-- Indicateurs synthétiques -->
+      <div class="kpi-grid">
+        <div class="card">
+          <div class="kpi-title">Cumul Général d'Heures</div>
+          <div class="kpi-value" id="kpiCumulGeneral">+00h00</div>
+          <div class="kpi-sub" id="kpiDiagnostic28">Bilan 28j : En cours</div>
+        </div>
+        <div class="card">
+          <div class="kpi-title">Semaine sélectionnée</div>
+          <div class="kpi-value" id="kpiSemaineTotal">00h00</div>
+          <div class="kpi-sub">Reliquat semaine : <strong id="kpiSemaineReliquat">+00h00</strong></div>
+        </div>
+        <div class="card">
+          <div class="kpi-title">Solde CA / CAA restants</div>
+          <div class="kpi-value" id="kpiSoldeCA">25.0 j</div>
+          <div class="kpi-sub" id="kpiDetailCA">CA: 25 | CAA: 0</div>
+        </div>
+        <div class="card">
+          <div class="kpi-title">Solde RTT restants</div>
+          <div class="kpi-value" id="kpiSoldeRTT">18.0 j</div>
+          <div class="kpi-sub" id="kpiDetailRTT">Pris : 0 j</div>
+        </div>
+        <div class="card">
+          <div class="kpi-title">Hors Période (HP + HPA)</div>
+          <div class="kpi-value" id="kpiSoldeHP">0.0 j</div>
+          <div class="kpi-sub" id="kpiDetailHP">CA hors mai-oct : 0 j (Bonus +0)</div>
+        </div>
+      </div>
+
+      <!-- Barre de badgeage en 1 clic (Heure système) + Filtres -->
+      <div class="punch-bar">
+        <div class="punch-actions">
+          <span style="font-weight:700; margin-right:4px; align-self:center;">Badger aujourd'hui :</span>
+          <button class="btn" onclick="punchNow('inAM')">☀️ Entrée Matin</button>
+          <button class="btn btn-warning" onclick="punchNow('outAM')">🍽️ Sortie Midi</button>
+          <button class="btn" onclick="punchNow('inPM')">☕ Entrée Après-midi</button>
+          <button class="btn btn-success" onclick="punchNow('outPM')">🏠 Sortie Soir</button>
+        </div>
+
+        <div class="filter-bar">
+          <label>Année :</label>
+          <select id="selectYear" onchange="changeYearMonth()"></select>
+          <label>Mois :</label>
+          <select id="selectMonth" onchange="changeYearMonth()">
+            <option value="0">Janvier</option><option value="1">Février</option><option value="2">Mars</option>
+            <option value="3">Avril</option><option value="4">Mai</option><option value="5">Juin</option>
+            <option value="6">Juillet</option><option value="7">Août</option><option value="8">Septembre</option>
+            <option value="9">Octobre</option><option value="10">Novembre</option><option value="11">Décembre</option>
+          </select>
+          <span class="badge badge-vac" id="zoneLabel">Zone A</span>
+        </div>
+      </div>
+
+      <!-- Tableau journalier -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Info / Vacances / Prév.</th>
+              <th>Congé / Évén. Matin</th>
+              <th>Entrée Matin</th>
+              <th>Sortie Midi</th>
+              <th>Reprise Prévue</th>
+              <th>Congé / Évén. AM</th>
+              <th>Entrée AM</th>
+              <th>Sortie Soir</th>
+              <th>Départ Prévu</th>
+              <th>Total Jour</th>
+              <th>Reliquat Jour</th>
+              <th>Cumul Glissant</th>
+              <th>Semaine (Tot / Rel)</th>
+            </tr>
+          </thead>
+          <tbody id="timesheetBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ==================== ONGLET 2 : PRÉVISIONS ==================== -->
+    <section id="tab-previsions" class="tab-panel">
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="margin-bottom:12px;">📌 Planifier une prévision de congé (CA, RTT, HP, CAA, HPA)</h3>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+          <label>Date :</label>
+          <input type="date" id="prevDate" />
+          <label>Type :</label>
+          <select id="prevType">
+            <option value="CA">CA (Congé Annuel)</option>
+            <option value="RTT">RTT</option>
+            <option value="HP">HP (Hors Période)</option>
+            <option value="CAA">CAA (CA Antérieur)</option>
+            <option value="HPA">HPA (HP Antérieur)</option>
+          </select>
+          <label>Créneau :</label>
+          <select id="prevSlot">
+            <option value="Journée">Journée entière (1 j)</option>
+            <option value="Matin">Matin (0.5 j)</option>
+            <option value="Après-midi">Après-midi (0.5 j)</option>
+          </select>
+          <input type="text" id="prevNote" placeholder="Commentaire (optionnel)" />
+          <button class="btn" onclick="addForecast()">➕ Ajouter la prévision</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:12px;">📋 Liste des prévisions enregistrées (affichées avec icône sur le pointage)</h3>
+        <div class="table-wrap">
+          <table style="min-width:600px;">
+            <thead>
+              <tr>
+                <th>Date prévue</th>
+                <th>Type de congé</th>
+                <th>Créneau</th>
+                <th>Jours</th>
+                <th>Commentaire</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="forecastBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== ONGLET 3 : TIMER ==================== -->
+    <section id="tab-timer" class="tab-panel">
+      <div class="card timer-box">
+        <h2>⏳ Compte à rebours configurable</h2>
+        <p style="color:var(--text-muted); margin-top:4px;">Configurez les heures, minutes et secondes souhaitées</p>
+        <div class="timer-display" id="timerDisplay">00:45:00</div>
+        <div class="timer-inputs">
+          <div><label>Heures</label><input type="number" id="tHours" min="0" max="99" value="0" onchange="syncTimerInput()"></div>
+          <div><label>Minutes</label><input type="number" id="tMinutes" min="0" max="59" value="45" onchange="syncTimerInput()"></div>
+          <div><label>Secondes</label><input type="number" id="tSeconds" min="0" max="59" value="0" onchange="syncTimerInput()"></div>
+        </div>
+        <div style="display:flex; justify-content:center; gap:10px;">
+          <button class="btn btn-success" onclick="startTimer()">▶️ Démarrer</button>
+          <button class="btn btn-warning" onclick="pauseTimer()">⏸️ Pause</button>
+          <button class="btn btn-danger" onclick="resetTimer()">🔄 Réinitialiser</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== ONGLET 4 : CONFIGURATION ==================== -->
+    <section id="tab-config" class="tab-panel">
+      <div class="config-grid">
+        <!-- Zone Durées de travail -->
+        <div class="card">
+          <h3 style="margin-bottom:12px; color:var(--primary);">🕒 Zone Durées de travail</h3>
+          <div class="form-row">
+            <label>Durée de la journée de travail (HH:MM)</label>
+            <input type="time" id="cfgDayDuration" value="08:06" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Durée d'une demi-journée de travail (HH:MM)</label>
+            <input type="time" id="cfgHalfDayDuration" value="04:03" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Durée d'une semaine de travail (HH:MM)</label>
+            <input type="text" id="cfgWeekDuration" value="40:30" style="width:80px; text-align:center;" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Durée de la pause repas (HH:MM)</label>
+            <input type="time" id="cfgLunchDuration" value="00:45" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Date de début des périodes de 28 jours (vingt-huitaines)</label>
+            <input type="date" id="cfgCycleStart" value="2026-01-05" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Zone française de vacances scolaires</label>
+            <select id="cfgVacZone" onchange="saveConfig()">
+              <option value="Zone A">Zone A (Besançon, Bordeaux, Lyon, Poitiers...)</option>
+              <option value="Zone B">Zone B (Aix-Marseille, Lille, Nantes, Rennes...)</option>
+              <option value="Zone C">Zone C (Créteil, Montpellier, Paris, Toulouse...)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Zone Droit congés / RTT -->
+        <div class="card">
+          <h3 style="margin-bottom:12px; color:var(--primary);">🏖️ Zone Droit congés / RTT</h3>
+          <div class="form-row">
+            <label>Nombre de CA (en jours)</label>
+            <input type="number" step="0.5" id="cfgCA" value="25" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Nombre de RTT (en jours)</label>
+            <input type="number" step="0.5" id="cfgRTT" value="18" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Nombre de HP initiaux (hors bonus auto 1er mai-31 oct)</label>
+            <input type="number" step="0.5" id="cfgHP" value="0" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Nombre de CAA - Congés Annuels Antérieurs (en jours)</label>
+            <input type="number" step="0.5" id="cfgCAA" value="0" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Nombre de HPA - Hors Période Antérieurs (en jours)</label>
+            <input type="number" step="0.5" id="cfgHPA" value="0" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Reliquat d'heures N-1 (+/-HH:MM)</label>
+            <input type="text" id="cfgReliquatN1" value="00:00" style="width:85px; text-align:center;" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Reliquat d'heures CA N-1 (+/-HH:MM)</label>
+            <input type="text" id="cfgReliquatCAN1" value="00:00" style="width:85px; text-align:center;" onchange="saveConfig()" />
+          </div>
+          <div class="form-row">
+            <label>Nombre de jours en CET</label>
+            <input type="number" step="0.5" id="cfgCET" value="0" onchange="saveConfig()" />
+          </div>
+        </div>
+
+        <!-- Variables des congés et événements configurables -->
+        <div class="card" style="grid-column: 1 / -1;">
+          <h3 style="margin-bottom:8px; color:var(--primary);">🏷️ Codes de congés et d'événements configurables</h3>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+            Codes séparés par des virgules. Un demi-congé (RTT, CA, CAA, HP, HPA) renseigne automatiquement 08:00-12:03 le matin ou 13:00-17:03 l'après-midi (4h03). Un RCB déduit 4h03 du cumul d'heures.
+          </p>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            <label>Codes actifs :</label>
+            <input type="text" id="cfgCustomEvents" value="RTT,CA,CAA,HP,HPA,RCB,ASA,CMO,F,CET" style="flex:1; min-width:280px;" onchange="saveConfig()" />
+            <button class="btn btn-outline" onclick="exportBackup()">💾 Exporter sauvegarde JSON</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    /********************************************************************
+     * 1. ÉTAT GLOBAL & PERSISTANCE LOCALE (+ SYNCHRO GRIST)
+     ********************************************************************/
+    const STORAGE_KEY = "GRIST_TIME_TRACKER_STATE_V1";
+
+    const defaultState = {
+      theme: "light",
+      selectedYear: new Date().getFullYear(),
+      selectedMonth: new Date().getMonth(),
+      config: {
+        dayDuration: "08:06",
+        halfDayDuration: "04:03",
+        weekDuration: "40:30",
+        lunchDuration: "00:45",
+        cycleStart: "2026-01-05",
+        vacZone: "Zone A",
+        ca: 25,
+        rtt: 18,
+        hp: 0,
+        caa: 0,
+        hpa: 0,
+        reliquatN1: "00:00",
+        reliquatCAN1: "00:00",
+        cet: 0,
+        eventsList: "RTT,CA,CAA,HP,HPA,RCB,ASA,CMO,F,CET"
+      },
+      days: {},       // clé "YYYY-MM-DD": { leaveAM, inAM, outAM, leavePM, inPM, outPM }
+      forecasts: []   // [{ id, date, type, slot, note }]
+    };
+
+    let state = loadState();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(defaultState);
+        const parsed = JSON.parse(raw);
+        return { ...defaultState, ...parsed, config: { ...defaultState.config, ...(parsed.config || {}) } };
+      } catch (e) {
+        return structuredClone(defaultState);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    // Initialisation Grist Plugin API si intégré dans Grist
+    if (window.grist) {
+      try { grist.ready({ requiredAccess: 'full' }); } catch (e) {}
+    }
+
+    /********************************************************************
+     * 2. UTILITAIRES TEMPS & CALENDRIER
+     ********************************************************************/
+    function hmToMin(str) {
+      if (!str || !str.includes(":")) return null;
+      const neg = str.trim().startsWith("-");
+      const clean = str.replace(/^[+-]/, "");
+      const [h, m] = clean.split(":").map(Number);
+      if (isNaN(h) || isNaN(m)) return null;
+      const total = h * 60 + m;
+      return neg ? -total : total;
+    }
+
+    function minToHM(min, showSign = false) {
+      if (min === null || isNaN(min)) return "--:--";
+      const sign = min < 0 ? "-" : (showSign ? "+" : "");
+      const abs = Math.round(Math.abs(min));
+      const h = Math.floor(abs / 60);
+      const m = abs % 60;
+      return `${sign}${String(h).padStart(2, "0")}h${String(m).padStart(2, "0")}`;
+    }
+
+    function minToClock(min) {
+      if (min === null || isNaN(min)) return "";
+      const abs = ((Math.round(min) % 1440) + 1440) % 1440;
+      const h = Math.floor(abs / 60);
+      const m = abs % 60;
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    }
+
+    function isoDate(y, m, d) {
+      return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    }
+
+    function getISOWeek(dateObj) {
+      const d = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()));
+      const dayNum = d.getUTCDay() || 7;
+      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    }
+
+    // Vacances scolaires françaises (périodes indicatives par Zone A/B/C)
+    function getSchoolHolidayLabel(dateStr, zone) {
+      const d = new Date(dateStr + "T00:00:00");
+      const m = d.getMonth() + 1;
+      const day = d.getDate();
+      if (m === 7 && day >= 5 || m === 8) return "☀️ Vacances d'Été";
+      if ((m === 12 && day >= 20) || (m === 1 && day <= 4)) return "🎄 Vacances de Noël";
+      if (m === 10 && day >= 18 && day <= 31) return "🍂 Vacances de la Toussaint";
+      if (zone === "Zone A" && m === 2 && day >= 7 && day <= 22) return "🎿 Hiver (Zone A)";
+      if (zone === "Zone B" && m === 2 && day >= 14 && day <= 28) return "🎿 Hiver (Zone B)";
+      if (zone === "Zone C" && ((m === 2 && day >= 21) || (m === 3 && day <= 8))) return "🎿 Hiver (Zone C)";
+      if (zone === "Zone A" && m === 4 && day >= 4 && day <= 19) return "🌷 Printemps (Zone A)";
+      if (zone === "Zone B" && m === 4 && day >= 11 && day <= 26) return "🌷 Printemps (Zone B)";
+      if (zone === "Zone C" && m === 4 && day >= 18 && day <= 30) return "🌷 Printemps (Zone C)";
+      return "";
+    }
+
+    function isEndOf28DayCycle(dateStr) {
+      if (!state.config.cycleStart) return false;
+      const start = new Date(state.config.cycleStart + "T00:00:00");
+      const cur = new Date(dateStr + "T00:00:00");
+      const diffDays = Math.round((cur - start) / 86400000);
+      return diffDays >= 0 && ((diffDays + 1) % 28 === 0);
+    }
+
+    /********************************************************************
+     * 3. CALCULS MÉTIER (JOURNÉE, REPRISE, DÉPART PRÉVU, CUMUL, RCB, HP)
+     ********************************************************************/
+    const STANDARD_LEAVES = ["RTT", "CA", "CAA", "HP", "HPA"];
+
+    function evaluateDay(dateStr, rec) {
+      const dayDur = hmToMin(state.config.dayDuration) || 486;       // 8h06
+      const halfDur = hmToMin(state.config.halfDayDuration) || 243;  // 4h03
+      const lunchDur = hmToMin(state.config.lunchDuration) || 45;
+
+      const dObj = new Date(dateStr + "T00:00:00");
+      const isWeekend = (dObj.getDay() === 0 || dObj.getDay() === 6);
+
+      const leaveAM = rec.leaveAM || "";
+      const leavePM = rec.leavePM || "";
+      const inAM = hmToMin(rec.inAM);
+      const outAM = hmToMin(rec.outAM);
+      const inPM = hmToMin(rec.inPM);
+      const outPM = hmToMin(rec.outPM);
+
+      // Heure de reprise après repas = sortie midi + durée repas
+      let reprisePrevue = "";
+      if (outAM !== null) {
+        reprisePrevue = minToClock(outAM + lunchDur);
+      }
+
+      // Heure de départ prévue = Entrée PM + Durée journée - (Sortie AM - Entrée AM) + 0.03125 * (Entrée PM - Sortie AM)
+      let departPrevu = "";
+      if (inAM !== null && outAM !== null && inPM !== null && outAM >= inAM && inPM >= outAM) {
+        const eAM_d = inAM / 1440;
+        const sAM_d = outAM / 1440;
+        const ePM_d = inPM / 1440;
+        const j_d = dayDur / 1440;
+        const depDays = ePM_d + j_d - (sAM_d - eAM_d) + 0.03125 * (ePM_d - sAM_d);
+        departPrevu = minToClock(depDays * 1440);
+      }
+
+      // Calcul minutes matin & après-midi
+      let minAM = 0;
+      if (leaveAM && leaveAM !== "RCB") {
+        minAM = halfDur;
+      } else if (leaveAM === "RCB") {
+        minAM = halfDur; // Couvre la demi-journée de service mais déduit 4h03 du cumul
+      } else if (inAM !== null && outAM !== null && outAM > inAM) {
+        minAM = outAM - inAM;
+      }
+
+      let minPM = 0;
+      if (leavePM && leavePM !== "RCB") {
+        minPM = halfDur;
+      } else if (leavePM === "RCB") {
+        minPM = halfDur;
+      } else if (inPM !== null && outPM !== null && outPM > inPM) {
+        minPM = outPM - inPM;
+      }
+
+      const totalDay = minAM + minPM;
+      const hasActivity = Boolean(leaveAM || leavePM || inAM !== null || outAM !== null || inPM !== null || outPM !== null);
+
+      // Déduction RCB : lorsqu'on pose un RCB, 04h03 sont déduits du cumul d'heures
+      const rcbCount = (leaveAM === "RCB" ? 1 : 0) + (leavePM === "RCB" ? 1 : 0);
+      const rcbDeduction = rcbCount * halfDur;
+
+      let reliquatJour = 0;
+      if (!isWeekend || hasActivity) {
+        if (hasActivity) {
+          reliquatJour = totalDay - dayDur - rcbDeduction;
+        }
+      }
+
+      return {
+        isWeekend,
+        hasActivity,
+        reprisePrevue,
+        departPrevu,
+        totalDay,
+        reliquatJour,
+        rcbCount
+      };
+    }
+
+    function diagnose28DayBalance(cumulMin) {
+      const weekMin = hmToMin(state.config.weekDuration) || 2430; // 40h30
+      const tenth = Math.round(weekMin / 10); // 4h03 (243 min)
+      const fifth = tenth * 2;                // 8h06 (486 min)
+
+      if (cumulMin >= 0) {
+        if (cumulMin < tenth) {
+          return `Solde créditeur (${minToHM(cumulMin, true)}) < 1/10e (4h03) : reporté sur les 4 semaines suivantes.`;
+        } else if (cumulMin === tenth) {
+          return `Solde créditeur (${minToHM(cumulMin, true)}) = 4h03 : droit à 1/2 j de RCB (à prendre sous 4 semaines).`;
+        } else {
+          const report = cumulMin - tenth;
+          return `Solde créditeur (${minToHM(cumulMin, true)}) > 4h03 : 4h03 placés en RCB + ${minToHM(report, true)} reportés.`;
+        }
+      } else {
+        const debit = Math.abs(cumulMin);
+        if (debit < tenth) {
+          return `Solde débiteur (${minToHM(cumulMin, true)}) < 4h03 : à compenser sur les 28 jours suivants.`;
+        } else if (debit < fifth) {
+          return `Solde débiteur (${minToHM(cumulMin, true)}) entre 4h03 et 8h06 : retrait de 0,5 j d'ARTT.`;
+        } else {
+          return `Solde débiteur (${minToHM(cumulMin, true)}) >= 8h06 : retrait de 1 j d'ARTT.`;
+        }
+      }
+    }
+
+    /********************************************************************
+     * 4. RENDU DU TABLEAU ANNUEL / MENSUEL & CUMULS GLISSANTS
+     ********************************************************************/
+    function renderAll() {
+      const year = Number(state.selectedYear);
+      const month = Number(state.selectedMonth);
+      document.getElementById("zoneLabel").textContent = state.config.vacZone;
+
+      // 1. Parcourir toute l'année depuis le 1er janvier pour le cumul glissant et les compteurs de congés
+      let runningCumul = (hmToMin(state.config.reliquatN1) || 0) + (hmToMin(state.config.reliquatCAN1) || 0);
+      let usedCA = 0, usedRTT = 0, usedCAA = 0, usedHP = 0, usedHPA = 0, caHorsPeriode = 0;
+
+      const yearStatsByDate = {};
+      const weekTotals = {}; // clé: numSemaine -> { worked: 0, reliquat: 0 }
+      let last28Diagnostic = "Aucun cycle de 28j clôturé à ce jour";
+
+      for (let m = 0; m < 12; m++) {
+        const daysInM = new Date(year, m + 1, 0).getDate();
+        for (let d = 1; d <= daysInM; d++) {
+          const dStr = isoDate(year, m, d);
+          const rec = state.days[dStr] || {};
+          const ev = evaluateDay(dStr, rec);
+
+          // Comptabilisation des congés en demi-journée (0.5 j)
+          [rec.leaveAM, rec.leavePM].forEach(code => {
+            if (code === "CA") {
+              usedCA += 0.5;
+              // Hors période : en dehors du 1er mai (m=4) au 31 octobre (m=9)
+              if (m < 4 || m > 9) caHorsPeriode += 0.5;
+            }
+            if (code === "RTT") usedRTT += 0.5;
+            if (code === "CAA") usedCAA += 0.5;
+            if (code === "HP") usedHP += 0.5;
+            if (code === "HPA") usedHPA += 0.5;
+          });
+
+          runningCumul += ev.reliquatJour;
+
+          const wk = getISOWeek(new Date(dStr + "T00:00:00"));
+          if (!weekTotals[wk]) weekTotals[wk] = { worked: 0, reliquat: 0 };
+          weekTotals[wk].worked += ev.totalDay;
+          weekTotals[wk].reliquat += ev.reliquatJour;
+
+          const end28 = isEndOf28DayCycle(dStr);
+          if (end28 && ev.hasActivity) {
+            last28Diagnostic = `Fin 28j (${dStr}) : ` + diagnose28DayBalance(runningCumul);
+          }
+
+          yearStatsByDate[dStr] = { ...ev, cumul: runningCumul, week: wk, end28 };
+        }
+      }
+
+      // Calcul automatique des jours bonus Hors Période (HP)
+      let bonusHP = 0;
+      if (caHorsPeriode >= 8) bonusHP = 2;
+      else if (caHorsPeriode >= 5) bonusHP = 1;
+
+      const restCA = (Number(state.config.ca) - usedCA) + (Number(state.config.caa) - usedCAA);
+      const restRTT = Number(state.config.rtt) - usedRTT;
+      const totalDroitHP = Number(state.config.hp) + Number(state.config.hpa) + bonusHP;
+      const restHP = totalDroitHP - (usedHP + usedHPA);
+
+      // Mise à jour des KPIs
+      const kpiCumul = document.getElementById("kpiCumulGeneral");
+      kpiCumul.textContent = minToHM(runningCumul, true);
+      kpiCumul.className = "kpi-value " + (runningCumul >= 0 ? "pos" : "neg");
+      document.getElementById("kpiDiagnostic28").textContent = last28Diagnostic;
+
+      document.getElementById("kpiSoldeCA").textContent = `${restCA.toFixed(1)} j`;
+      document.getElementById("kpiDetailCA").textContent = `CA rest.: ${(state.config.ca - usedCA).toFixed(1)} | CAA rest.: ${(state.config.caa - usedCAA).toFixed(1)}`;
+      document.getElementById("kpiSoldeRTT").textContent = `${restRTT.toFixed(1)} j`;
+      document.getElementById("kpiDetailRTT").textContent = `Pris : ${usedRTT.toFixed(1)} j sur ${state.config.rtt}`;
+      document.getElementById("kpiSoldeHP").textContent = `${restHP.toFixed(1)} j`;
+      document.getElementById("kpiDetailHP").textContent = `CA hors mai-oct: ${caHorsPeriode}j (Bonus auto: +${bonusHP}j)`;
+
+      // 2. Rendu des lignes du mois sélectionné
+      const tbody = document.getElementById("timesheetBody");
+      tbody.innerHTML = "";
+      const daysInSelectedMonth = new Date(year, month + 1, 0).getDate();
+      const eventsCodes = state.config.eventsList.split(",").map(s => s.trim()).filter(Boolean);
+      const dayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+      let currentWeekShown = null;
+
+      for (let d = 1; d <= daysInSelectedMonth; d++) {
+        const dStr = isoDate(year, month, d);
+        const dObj = new Date(dStr + "T00:00:00");
+        const rec = state.days[dStr] || {};
+        const st = yearStatsByDate[dStr];
+        currentWeekShown = st.week;
+
+        const tr = document.createElement("tr");
+        if (st.isWeekend) tr.classList.add("weekend");
+        const vacLabel = getSchoolHolidayLabel(dStr, state.config.vacZone);
+        if (vacLabel && !st.isWeekend) tr.classList.add("vacances");
+        if (st.end28) tr.classList.add("cycle28-end");
+
+        // Icône de prévision si une prévision correspond à ce jour
+        const prevs = state.forecasts.filter(f => f.date === dStr);
+        const prevHtml = prevs.map(p => `<span class="badge badge-prev" title="${p.note || ''}">📌 Prév. ${p.type} (${p.slot})</span>`).join(" ");
+
+        // Affichage du RCB uniquement le jour où il est posé
+        const rcbHtml = st.rcbCount > 0
+          ? `<span class="badge badge-rcb">⚡ RCB posé (-${st.rcbCount === 2 ? '08h06' : '04h03'})</span>`
+          : "";
+
+        const end28Html = st.end28
+          ? `<span class="badge" style="background:#f59e0b;color:#fff;" title="${diagnose28DayBalance(st.cumul)}">🏁 Fin 28J</span>`
+          : "";
+
+        const wkStat = weekTotals[st.week] || { worked: 0, reliquat: 0 };
+
+        tr.innerHTML = `
+          <td style="text-align:left; font-weight:600;">${dayNames[dObj.getDay()]} ${String(d).padStart(2,"0")}/${String(month+1).padStart(2,"0")}</td>
+          <td style="text-align:left;">
+            ${vacLabel ? `<span class="badge badge-vac">${vacLabel}</span>` : ""}
+            ${prevHtml} ${rcbHtml} ${end28Html}
+          </td>
+          <td>${buildLeaveSelect(dStr, "leaveAM", rec.leaveAM, eventsCodes)}</td>
+          <td><input type="time" value="${rec.inAM || ''}" onchange="updateCell('${dStr}','inAM',this.value)" /></td>
+          <td><input type="time" value="${rec.outAM || ''}" onchange="updateCell('${dStr}','outAM',this.value)" /></td>
+          <td style="font-weight:600; color:var(--accent);">${st.reprisePrevue || '--:--'}</td>
+          <td>${buildLeaveSelect(dStr, "leavePM", rec.leavePM, eventsCodes)}</td>
+          <td><input type="time" value="${rec.inPM || ''}" onchange="updateCell('${dStr}','inPM',this.value)" /></td>
+          <td><input type="time" value="${rec.outPM || ''}" onchange="updateCell('${dStr}','outPM',this.value)" /></td>
+          <td style="font-weight:700; color:var(--primary);">${st.departPrevu || '--:--'}</td>
+          <td style="font-weight:700;">${st.hasActivity ? minToHM(st.totalDay) : '--:--'}</td>
+          <td class="${st.reliquatJour >= 0 ? 'pos' : 'neg'}">${st.hasActivity ? minToHM(st.reliquatJour, true) : '--:--'}</td>
+          <td class="${st.cumul >= 0 ? 'pos' : 'neg'}">${minToHM(st.cumul, true)}</td>
+          <td style="font-size:11.5px;">
+            S${st.week}: <strong>${minToHM(wkStat.worked)}</strong>
+            (<span class="${wkStat.reliquat >= 0 ? 'pos' : 'neg'}">${minToHM(wkStat.reliquat, true)}</span>)
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      // Mise à jour KPI Semaine en cours
+      const todayWeek = getISOWeek(new Date());
+      const activeWk = weekTotals[todayWeek] || weekTotals[currentWeekShown] || { worked: 0, reliquat: 0 };
+      document.getElementById("kpiSemaineTotal").textContent = minToHM(activeWk.worked);
+      const wkRelEl = document.getElementById("kpiSemaineReliquat");
+      wkRelEl.textContent = minToHM(activeWk.reliquat, true);
+      wkRelEl.className = activeWk.reliquat >= 0 ? "pos" : "neg";
+
+      renderForecastsTable();
+    }
+
+    function buildLeaveSelect(dateStr, field, currentVal, codes) {
+      let opts = `<option value="">--</option>`;
+      codes.forEach(c => {
+        opts += `<option value="${c}" ${currentVal === c ? "selected" : ""}>${c}</option>`;
+      });
+      return `<select onchange="updateLeave('${dateStr}','${field}',this.value)">${opts}</select>`;
+    }
+
+    // Lorsqu'on pose un demi-congé (RTT, CA, CAA, HP, HPA) :
+    // Matin = 08:00 à 12:03 (4h03) | Après-midi = 13:00 à 17:03 (4h03)
+    function updateLeave(dateStr, field, code) {
+      if (!state.days[dateStr]) state.days[dateStr] = {};
+      state.days[dateStr][field] = code;
+
+      if (STANDARD_LEAVES.includes(code)) {
+        if (field === "leaveAM") {
+          state.days[dateStr].inAM = "08:00";
+          state.days[dateStr].outAM = "12:03";
+        } else if (field === "leavePM") {
+          state.days[dateStr].inPM = "13:00";
+          state.days[dateStr].outPM = "17:03";
+        }
+      } else if (code === "RCB" || code === "") {
+        if (field === "leaveAM" && code === "RCB") {
+          state.days[dateStr].inAM = "";
+          state.days[dateStr].outAM = "";
+        }
+        if (field === "leavePM" && code === "RCB") {
+          state.days[dateStr].inPM = "";
+          state.days[dateStr].outPM = "";
+        }
+      }
+      saveState();
+      renderAll();
+    }
+
+    function updateCell(dateStr, field, val) {
+      if (!state.days[dateStr]) state.days[dateStr] = {};
+      state.days[dateStr][field] = val;
+      saveState();
+      renderAll();
+    }
+
+    // Boutons de pointage immédiat (heure système)
+    function punchNow(field) {
+      const now = new Date();
+      const dStr = isoDate(now.getFullYear(), now.getMonth(), now.getDate());
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
+      state.selectedYear = now.getFullYear();
+      state.selectedMonth = now.getMonth();
+      document.getElementById("selectYear").value = state.selectedYear;
+      document.getElementById("selectMonth").value = state.selectedMonth;
+
+      if (!state.days[dStr]) state.days[dStr] = {};
+      state.days[dStr][field] = hhmm;
+      saveState();
+      renderAll();
+    }
+
+    /********************************************************************
+     * 5. PRÉVISIONS DE CONGÉS
+     ********************************************************************/
+    function addForecast() {
+      const date = document.getElementById("prevDate").value;
+      const type = document.getElementById("prevType").value;
+      const slot = document.getElementById("prevSlot").value;
+      const note = document.getElementById("prevNote").value.trim();
+      if (!date) return alert("Veuillez sélectionner une date de prévision.");
+
+      state.forecasts.push({ id: Date.now(), date, type, slot, note });
+      state.forecasts.sort((a, b) => a.date.localeCompare(b.date));
+      document.getElementById("prevNote").value = "";
+      saveState();
+      renderAll();
+    }
+
+    function deleteForecast(id) {
+      state.forecasts = state.forecasts.filter(f => f.id !== id);
+      saveState();
+      renderAll();
+    }
+
+    function renderForecastsTable() {
+      const tbody = document.getElementById("forecastBody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      if (state.forecasts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text-muted);">Aucune prévision enregistrée.</td></tr>`;
+        return;
+      }
+      state.forecasts.forEach(f => {
+        const days = f.slot === "Journée" ? "1.0 j" : "0.5 j";
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>${f.date}</strong></td>
+          <td><span class="badge badge-prev">${f.type}</span></td>
+          <td>${f.slot}</td>
+          <td>${days}</td>
+          <td>${f.note || "-"}</td>
+          <td><button class="btn btn-danger" style="padding:4px 8px;" onclick="deleteForecast(${f.id})">Supprimer</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    /********************************************************************
+     * 6. ONGLET TIMER (COMPTE À REBOURS CONFIGURABLE)
+     ********************************************************************/
+    let timerInterval = null;
+    let remainingSeconds = 45 * 60;
+
+    function syncTimerInput() {
+      const h = Number(document.getElementById("tHours").value) || 0;
+      const m = Number(document.getElementById("tMinutes").value) || 0;
+      const s = Number(document.getElementById("tSeconds").value) || 0;
+      remainingSeconds = h * 3600 + m * 60 + s;
+      updateTimerDisplay();
+    }
+
+    function updateTimerDisplay() {
+      const h = Math.floor(remainingSeconds / 3600);
+      const m = Math.floor((remainingSeconds % 3600) / 60);
+      const s = remainingSeconds % 60;
+      document.getElementById("timerDisplay").textContent =
+        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
+
+    function startTimer() {
+      if (timerInterval) return;
+      timerInterval = setInterval(() => {
+        if (remainingSeconds > 0) {
+          remainingSeconds--;
+          updateTimerDisplay();
+        } else {
+          pauseTimer();
+          alert("⏰ Le compte à rebours est terminé !");
+        }
+      }, 1000);
+    }
+
+    function pauseTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function resetTimer() {
+      pauseTimer();
+      syncTimerInput();
+    }
+
+    /********************************************************************
+     * 7. CONFIGURATION, NAVIGATION, THÈME & HORLOGE TEMPS RÉEL
+     ********************************************************************/
+    function initControls() {
+      // Sélecteur d'année jusqu'à 2040
+      const ySel = document.getElementById("selectYear");
+      ySel.innerHTML = "";
+      for (let y = 2024; y <= 2040; y++) {
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        if (y === Number(state.selectedYear)) opt.selected = true;
+        ySel.appendChild(opt);
+      }
+      document.getElementById("selectMonth").value = state.selectedMonth;
+
+      // Charger les champs de configuration
+      document.getElementById("cfgDayDuration").value = state.config.dayDuration;
+      document.getElementById("cfgHalfDayDuration").value = state.config.halfDayDuration;
+      document.getElementById("cfgWeekDuration").value = state.config.weekDuration;
+      document.getElementById("cfgLunchDuration").value = state.config.lunchDuration;
+      document.getElementById("cfgCycleStart").value = state.config.cycleStart;
+      document.getElementById("cfgVacZone").value = state.config.vacZone;
+      document.getElementById("cfgCA").value = state.config.ca;
+      document.getElementById("cfgRTT").value = state.config.rtt;
+      document.getElementById("cfgHP").value = state.config.hp;
+      document.getElementById("cfgCAA").value = state.config.caa;
+      document.getElementById("cfgHPA").value = state.config.hpa;
+      document.getElementById("cfgReliquatN1").value = state.config.reliquatN1;
+      document.getElementById("cfgReliquatCAN1").value = state.config.reliquatCAN1;
+      document.getElementById("cfgCET").value = state.config.cet;
+      document.getElementById("cfgCustomEvents").value = state.config.eventsList;
+
+      applyTheme(state.theme);
+    }
+
+    function saveConfig() {
+      state.config.dayDuration = document.getElementById("cfgDayDuration").value || "08:06";
+      state.config.halfDayDuration = document.getElementById("cfgHalfDayDuration").value || "04:03";
+      state.config.weekDuration = document.getElementById("cfgWeekDuration").value || "40:30";
+      state.config.lunchDuration = document.getElementById("cfgLunchDuration").value || "00:45";
+      state.config.cycleStart = document.getElementById("cfgCycleStart").value || "2026-01-05";
+      state.config.vacZone = document.getElementById("cfgVacZone").value;
+      state.config.ca = Number(document.getElementById("cfgCA").value) || 0;
+      state.config.rtt = Number(document.getElementById("cfgRTT").value) || 0;
+      state.config.hp = Number(document.getElementById("cfgHP").value) || 0;
+      state.config.caa = Number(document.getElementById("cfgCAA").value) || 0;
+      state.config.hpa = Number(document.getElementById("cfgHPA").value) || 0;
+      state.config.reliquatN1 = document.getElementById("cfgReliquatN1").value || "00:00";
+      state.config.reliquatCAN1 = document.getElementById("cfgReliquatCAN1").value || "00:00";
+      state.config.cet = Number(document.getElementById("cfgCET").value) || 0;
+      state.config.eventsList = document.getElementById("cfgCustomEvents").value || "RTT,CA,CAA,HP,HPA,RCB,ASA,CMO,F,CET";
+      saveState();
+      renderAll();
+    }
+
+    function changeYearMonth() {
+      state.selectedYear = Number(document.getElementById("selectYear").value);
+      state.selectedMonth = Number(document.getElementById("selectMonth").value);
+      saveState();
+      renderAll();
+    }
+
+    function switchTab(tabId, btn) {
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.getElementById("tab-" + tabId).classList.add("active");
+      btn.classList.add("active");
+    }
+
+    function toggleTheme() {
+      state.theme = state.theme === "light" ? "dark" : "light";
+      applyTheme(state.theme);
+      saveState();
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      document.getElementById("themeBtn").textContent = theme === "light" ? "🌙 Thème Sombre" : "☀️ Thème Clair";
+    }
+
+    function exportBackup() {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `pointage_grist_${state.selectedYear}.json`;
+      a.click();
+    }
+
+    // Horloge en direct
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById("liveClock").textContent = now.toLocaleTimeString("fr-FR");
+    }, 1000);
+
+    // Démarrage
+    initControls();
+    renderAll();
+  </script>
+</body>
+</html>
